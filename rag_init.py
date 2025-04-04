@@ -3,6 +3,8 @@ import shutil
 import os
 from langchain_ollama import OllamaLLM
 from langchain_ollama import OllamaEmbeddings
+# from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -39,21 +41,26 @@ llm = OllamaLLM(
     device="cuda" # This parameter might be ignored; GPU usage is typically configured in Ollama itself.
 )
 
-embeddings = OllamaEmbeddings(
-    model="nomic-embed-text",
-    num_gpu=1
-    # num_thread=4,  # 使用部分CPU分担
-    # batch_size=8   # 减小批处理大小
+# embeddings = OllamaEmbeddings(
+#     model="nomic-embed-text",
+#     num_gpu=1
+#     # num_thread=4,  # 使用部分CPU分担
+#     # batch_size=8   # 减小批处理大小
+# )
+
+embeddings = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-base-zh-v1.5",  # 1.3B参数
+    model_kwargs={"device": "cuda"}
 )
 # vector = embeddings.embed_query("如何使用 DeepSeek 进行 RAG？")
 # print(vector[:5])  # 只显示前 5 维，避免输出太长
 print(embeddings)
 # shutil.rmtree(PERSIST_DIRECTORY)
+
 # --- Vector Store Setup ---
 # vectorstore = None
 # 从本地 Chroma 加载向量数据库
 vectorstore = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings)
-
 if not vectorstore._collection.count():
 
     pdf_files = glob.glob(os.path.join(PDF_DIRECTORY, "*.pdf"))
