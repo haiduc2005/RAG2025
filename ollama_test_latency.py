@@ -1,6 +1,11 @@
 import time
 from langchain_ollama import OllamaLLM
 
+# 测试脚本，能够清晰对比：
+# ・模型首次加载（冷启动）时间
+# ・第二次调用（预热后）时间
+# ・多轮调用时间
+
 # Ollama 模型设置
 LLM_MODEL = "deepseek-r1:1.5b"
 OLLAMA_BASE_URL = "http://localhost:11434"  # 确保 Ollama 正在运行
