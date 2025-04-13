@@ -15,9 +15,17 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
+import subprocess
 import torch
 print(f"GPU可用: {torch.cuda.is_available()}")  # 应输出True
 print(f"GPU名称: {torch.cuda.get_device_name(0)}")  # 应显示你的显卡型号
+import time
+try:
+    subprocess.run(["ollama", "ps"], check=True, capture_output=True)
+except subprocess.CalledProcessError:
+    print("Starting Ollama service...")
+    subprocess.Popen(["ollama", "serve"])
+    time.sleep(5)
 
 # --- Configuration ---
 PDF_DIRECTORY = "data"
@@ -38,7 +46,10 @@ llm = OllamaLLM(
     num_gpu=1,
     base_url=OLLAMA_BASE_URL,
     # format="fp16",
-    max_tokens=50
+    max_tokens=50,
+    num_predict=100,
+    num_ctx=2048,
+    num_thread=4
     # device="cuda" # This parameter might be ignored; GPU usage is typically configured in Ollama itself.
 )
 
@@ -48,6 +59,19 @@ embeddings = HuggingFaceEmbeddings(
 )
 print(embeddings)
 # shutil.rmtree(PERSIST_DIRECTORY)
+
+# --- 模型冷启动测试 ---
+# start = time.time()
+# llm.invoke("warmup")
+# print(f"LLM load time: {time.time() - start:.2f} seconds")
+# start = time.time()
+# embeddings.embed_query("warmup")
+# print(f"Embedding load time: {time.time() - start:.2f} seconds")
+# --- 模型冷启动 ---
+print("Preloading LLM...")
+start = time.time()
+llm.invoke("")  # 空输入，最小化生成
+print(f"LLM preload time: {time.time() - start:.2f} seconds")
 
 # --- Vector Store Setup ---
 # vectorstore = None
@@ -91,7 +115,9 @@ print(f"Retriever set up to fetch {RETRIEVER_K} chunks.")
 # Updated prompt to include context and instruct the LLM
 prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", "あなたは、親切で優秀なアシスタントです。\n\nコンテキスト:\n{context}"),
+        # ("system", "あなたは、親切で優秀なアシスタントです。\n\nコンテキスト:\n{context}"),
+        # ("system", "あなたは親切で優秀なアシスタントです。\n\nコンテキスト: {context}\n\n過去の会話は参考情報としてのみ使用し、回答には過去の質問や回答を含めず、現在の質問に直接的かつ簡潔に答えてください。"),
+        ("system", "你是一个亲切且优秀的助手。\n\n上下文: {context}\n\n请仅将过去的对话作为参考信息，回答时不要包含过去的提问或回答，直接且简洁地回答当前问题。"),
         MessagesPlaceholder(variable_name="chat_history"), # Placeholder for chat history
         ("human", "{human_input}"), # Placeholder for the user's current input
     ]
@@ -125,6 +151,8 @@ def get_history(session_id: str) -> BaseChatMessageHistory:
         print(f"Creating new chat history for session: {session_id}")
         store[session_id] = ChatMessageHistory()
     else:
+        if len(store[session_id].messages) > 4:
+            store[session_id].messages = store[session_id].messages[-4:]
         print(f"Using existing chat history for session: {session_id}")
     return store[session_id]
 
