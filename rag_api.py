@@ -16,52 +16,52 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 # from sentence_transformers import SentenceTransformer
 
-# --- Configuration ---
+# --- 設定 ---
 PDF_DIRECTORY = "data"
 PERSIST_DIRECTORY = "./vector_db"
-OLLAMA_BASE_URL = "http://localhost:11434" # Adjust if Ollama runs elsewhere
+OLLAMA_BASE_URL = "http://localhost:11434" # Ollamaが別の場所で実行されている場合は調整してください
 LLM_MODEL = "deepseek-r1:1.5b"
-# EMBEDDING_MODEL = "llama2" # Or "nomic-embed-text", "mxbai-embed-large", etc. Ensure it's pulled
-RETRIEVER_K = 3 # Number of relevant chunks to retrieve
+# EMBEDDING_MODEL = "llama2" # または「nomic-embed-text」、「mxbai-embed-large」など。プルされていることを確認してください
+RETRIEVER_K = 3 # 取得する関連チャンクの数
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
-SESSION_ID = "my_rag_session" # Simple session ID for this example
+SESSION_ID = "my_rag_session" # この例のシンプルなセッションID
 # sentences = ["This is an example sentence", "Each sentence is converted"]
 
-# --- LLM and Embeddings ---
+# --- LLMと埋め込み ---
 print(f"Initializing LLM: {LLM_MODEL}")
-# Note: OllamaLLM usually runs inference on the device where the Ollama server is running.
-# The 'device' parameter might not directly control placement like in local transformers.
-# Ensure your Ollama server is configured for GPU if desired.
+# 注：OllamaLLMは通常、Ollamaサーバーが実行されているデバイスで推論を実行します。
+# 「device」パラメータは、ローカルトランスフォーマーのように配置を直接制御しない場合があります。
+# 必要に応じて、OllamaサーバーがGPU用に構成されていることを確認してください。
 llm = OllamaLLM(
     model=LLM_MODEL,
     temperature=0.7,
     base_url=OLLAMA_BASE_URL
-    # device="cuda" # This parameter might be ignored; GPU usage is typically configured in Ollama itself.
+    # device="cuda" # このパラメータは無視される場合があります。GPUの使用は通常Ollama自体で設定されます。
 )
 
 embeddings = OllamaEmbeddings(model="mxbai-embed-large")
 vector = embeddings.embed_query("如何使用 DeepSeek 进行 RAG？")
-print(vector[:5])  # 只显示前 5 维，避免输出太长
+print(vector[:5])  # 出力が長くなりすぎないように、最初の5次元のみを表示
 # try:
-#         shutil.rmtree(PERSIST_DIRECTORY) # <-- CORRECT WAY TO DELETE DIRECTORY
+#         shutil.rmtree(PERSIST_DIRECTORY) # <-- ディレクトリを削除する正しい方法
 #         print(f"Successfully deleted directory: {PERSIST_DIRECTORY}")
 # except PermissionError as e:
 #     print(f"PermissionError deleting directory: {e}")
-#     print("Please ensure no programs (like file explorer or previous script runs) are using files inside ./vector_db.")
-#     print("You might need to close other applications or manually delete the directory.")
+#     print("./vector_db内のファイルを使用しているプログラム（ファイルエクスプローラーや以前のスクリプト実行など）がないことを確認してください。")
+#     print("他のアプリケーションを閉じるか、手動でディレクトリを削除する必要がある場合があります。")
 #     exit()
 # model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 # embeddings = model.encode(sentences)
 print(embeddings)
-# 从本地 Chroma 加载向量数据库
+# ローカルのChromaからベクトルデータベースをロード
 vectorstore = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings)
 
-# 确保 vectorstore 具有 embeddings
+# vectorstoreに埋め込みがあることを確認
 if vectorstore._embedding_function is None:
     raise ValueError("Chroma vector store was loaded without embeddings!")
 
-# --- Vector Store Setup ---
+# --- ベクトルストアのセットアップ ---
 # vectorstore = None
 # if os.path.exists(PERSIST_DIRECTORY):
 #     print(f"Loading existing vector store from {PERSIST_DIRECTORY}")
@@ -116,31 +116,31 @@ if vectorstore is None:
     print("Error: Vector store initialization failed.")
     exit()
 
-# --- Retriever ---
+# --- リトリーバー ---
 retriever = vectorstore.as_retriever(search_kwargs={"k": RETRIEVER_K})
 print(f"Retriever set up to fetch {RETRIEVER_K} chunks.")
 
 # --- Prompt Template ---
-# Updated prompt to include context and instruct the LLM
+# コンテキストを含み、LLMに指示するよう更新されたプロンプト
 prompt = ChatPromptTemplate.from_messages(
     [
         ("system", "あなたは親切で優秀なアシスタントです。\n\nコンテキスト:\n{context}"),
-        MessagesPlaceholder(variable_name="chat_history"), # Placeholder for chat history
-        ("human", "{human_input}"), # Placeholder for the user's current input
+        MessagesPlaceholder(variable_name="chat_history"), # チャット履歴のプレースホルダー
+        ("human", "{human_input}"), # ユーザーの現在の入力のプレースホルダー
     ]
 )
 
-# --- Helper Function to Format Documents ---
+# --- ドキュメントをフォーマットするためのヘルパー関数 ---
 def format_docs(docs):
     """Combines document page content into a single string."""
     return "\n\n".join(doc.page_content for doc in docs)
 
-# --- RAG Chain Construction ---
-# This chain takes the user input, retrieves relevant documents, formats them,
-# inserts them into the prompt along with history, calls the LLM, and parses the output.
+# --- RAGチェーンの構築 ---
+# このチェーンは、ユーザー入力を受け取り、関連するドキュメントを取得し、それらをフォーマットし、
+# 履歴とともにプロンプトに挿入し、LLMを呼び出し、出力を解析します。
 rag_chain = (
     RunnablePassthrough.assign(
-        # Retrieve documents based on "human_input" and format them
+        # 「human_input」に基づいてドキュメントを取得し、それらをフォーマットします
         context=lambda x: format_docs(retriever.invoke(x["human_input"]))
     )
     | prompt
@@ -148,12 +148,12 @@ rag_chain = (
     | StrOutputParser()
 )
 
-# --- History Management ---
-# Simple in-memory store for chat histories
+# --- 履歴管理 ---
+# チャット履歴用のシンプルなインメモリストア
 store = {}
 
 def get_history(session_id: str) -> BaseChatMessageHistory:
-    """Retrieves or creates chat history for a given session ID."""
+    """指定されたセッションIDのチャット履歴を取得または作成します。"""
     if session_id not in store:
         print(f"Creating new chat history for session: {session_id}")
         store[session_id] = ChatMessageHistory()
@@ -161,20 +161,20 @@ def get_history(session_id: str) -> BaseChatMessageHistory:
         print(f"Using existing chat history for session: {session_id}")
     return store[session_id]
 
-# --- Chain with History ---
-# Wrap the RAG chain with history management
+# --- 履歴付きチェーン ---
+# RAGチェーンを履歴管理でラップします
 chain_with_history = RunnableWithMessageHistory(
     rag_chain,
     get_history,
-    input_messages_key="human_input", # The key for the user's input in the input dictionary
-    history_messages_key="chat_history", # The key for the history placeholder in the prompt
+    input_messages_key="human_input", # 入力辞書内のユーザー入力のキー
+    history_messages_key="chat_history", # プロンプト内の履歴プレースホルダーのキー
 )
 
 print("\n--- RAG System Ready ---")
 print(f"Using session ID: {SESSION_ID}")
 print("Enter your questions. Type 'quit' or 'exit' to stop.")
 
-# --- Interaction Loop ---
+# --- 対話ループ ---
 while True:
     try:
         human_input = input("\nYou: ")
@@ -185,24 +185,24 @@ while True:
             continue
 
         # Invoke the chain with history
-        # The config dictionary passes the session_id for history management
+        # config辞書は履歴管理のためにsession_idを渡します
         config = {"configurable": {"session_id": SESSION_ID}}
         response = chain_with_history.invoke({"human_input": human_input}, config=config)
 
         print(f"\nAssistant: {response}")
 
-        # Optional: Print current history for debugging
+        # オプション：デバッグのために現在の履歴を印刷
         # print("\n--- Current History ---")
         # print(store[SESSION_ID].messages)
         # print("----------------------")
 
     except Exception as e:
         print(f"\nAn error occurred: {e}")
-        # Consider adding more robust error handling or logging
+        # より堅牢なエラー処理またはロギングの追加を検討してください
     except KeyboardInterrupt:
         print("\nExiting due to user interrupt...")
         break
 
 print("\n--- Chat Session Ended ---")
-# Optional: See the final history state
+# オプション：最終履歴状態を確認
 # print("Final History Store:", store)
