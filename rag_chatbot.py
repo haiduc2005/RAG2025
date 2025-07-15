@@ -17,27 +17,27 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 import subprocess
 import torch
-print(f"GPU可用: {torch.cuda.is_available()}")  # 应输出True
-print(f"GPU名称: {torch.cuda.get_device_name(0)}")  # 应显示你的显卡型号
+print(f"GPU可用: {torch.cuda.is_available()}")  # Trueと表示されるはずです
+print(f"GPU名称: {torch.cuda.get_device_name(0)}")  # お使いのグラフィックカードのモデルが表示されるはずです
 import time
 try:
     subprocess.run(["ollama", "ps"], check=True, capture_output=True)
 except subprocess.CalledProcessError:
-    print("Starting Ollama service...")
+    print("Ollamaサービスを開始しています... ")
     subprocess.Popen(["ollama", "serve"])
     time.sleep(5)
 
-# --- Configuration ---
+# --- 設定 ---
 PDF_DIRECTORY = "data"
 PERSIST_DIRECTORY = "./vector_db"
-OLLAMA_BASE_URL = "http://localhost:11434" # Adjust if Ollama runs elsewhere
+OLLAMA_BASE_URL = "http://localhost:11434" # Ollamaが別の場所で実行されている場合は調整してください
 LLM_MODEL = "deepseek-r1:1.5b"
-RETRIEVER_K = 3 # Number of relevant chunks to retrieve
+RETRIEVER_K = 3 # 取得する関連チャンクの数
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
-SESSION_ID = "my_rag_session" # Simple session ID for this example
+SESSION_ID = "my_rag_session" # この例のシンプルなセッションID
 
-# --- LLM and Embeddings ---
+# --- LLMと埋め込み ---
 print(f"Initializing LLM: {LLM_MODEL}")
 
 llm = OllamaLLM(
@@ -50,32 +50,32 @@ llm = OllamaLLM(
     num_predict=100,
     num_ctx=2048,
     num_thread=4
-    # device="cuda" # This parameter might be ignored; GPU usage is typically configured in Ollama itself.
+    # device="cuda" # このパラメータは無視される場合があります。GPUの使用は通常Ollama自体で設定されます。
 )
 
 embeddings = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-base-zh-v1.5",  # 1.3B参数
+    model_name="BAAI/bge-base-zh-v1.5",  # 1.3Bパラメータ
     model_kwargs={"device": "cuda"}
 )
 print(embeddings)
 # shutil.rmtree(PERSIST_DIRECTORY)
 
-# --- 模型冷启动测试 ---
+# --- モデルコールドスタートテスト ---
 # start = time.time()
 # llm.invoke("warmup")
 # print(f"LLM load time: {time.time() - start:.2f} seconds")
 # start = time.time()
 # embeddings.embed_query("warmup")
 # print(f"Embedding load time: {time.time() - start:.2f} seconds")
-# --- 模型冷启动 ---
-print("Preloading LLM...")
+# --- モデルコールドスタート ---
+print("LLMをプリロードしています... ")
 start = time.time()
-llm.invoke("")  # 空输入，最小化生成
+llm.invoke("")  # 空の入力、最小限の生成
 print(f"LLM preload time: {time.time() - start:.2f} seconds")
 
-# --- Vector Store Setup ---
+# --- ベクトルストアのセットアップ ---
 # vectorstore = None
-# 从本地 Chroma 加载向量数据库
+# ローカルのChromaからベクトルデータベースをロード
 vectorstore = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings)
 if not vectorstore._collection.count():
 
@@ -107,33 +107,33 @@ if not vectorstore._collection.count():
         persist_directory=PERSIST_DIRECTORY
     )
 
-# --- Retriever ---
+# --- リトリーバー ---
 retriever = vectorstore.as_retriever(search_kwargs={"k": RETRIEVER_K})
 print(f"Retriever set up to fetch {RETRIEVER_K} chunks.")
 
-# --- Prompt Template ---
-# Updated prompt to include context and instruct the LLM
+# --- プロンプトテンプレート ---
+# コンテキストを含み、LLMに指示するよう更新されたプロンプト
 prompt = ChatPromptTemplate.from_messages(
     [
         # ("system", "あなたは、親切で優秀なアシスタントです。\n\nコンテキスト:\n{context}"),
         # ("system", "あなたは親切で優秀なアシスタントです。\n\nコンテキスト: {context}\n\n過去の会話は参考情報としてのみ使用し、回答には過去の質問や回答を含めず、現在の質問に直接的かつ簡潔に答えてください。"),
-        ("system", "你是一个亲切且优秀的助手。\n\n上下文: {context}\n\n请仅将过去的对话作为参考信息，回答时不要包含过去的提问或回答，直接且简洁地回答当前问题。"),
-        MessagesPlaceholder(variable_name="chat_history"), # Placeholder for chat history
-        ("human", "{human_input}"), # Placeholder for the user's current input
+        ("system", "あなたは親切で優秀なアシスタントです。\n\nコンテキスト: {context}\n\n過去の会話は参考情報としてのみ使用し、回答には過去の質問や回答を含めず、現在の質問に直接的かつ簡潔に答えてください。"),
+        MessagesPlaceholder(variable_name="chat_history"), # チャット履歴のプレースホルダー
+        ("human", "{human_input}"), # ユーザーの現在の入力のプレースホルダー
     ]
 )
 
-# --- Helper Function to Format Documents ---
+# --- ドキュメントをフォーマットするためのヘルパー関数 ---
 def format_docs(docs):
     """Combines document page content into a single string."""
     return "\n\n".join(doc.page_content for doc in docs)
 
-# --- RAG Chain Construction ---
-# This chain takes the user input, retrieves relevant documents, formats them,
-# inserts them into the prompt along with history, calls the LLM, and parses the output.
+# --- RAGチェーンの構築 ---
+# このチェーンは、ユーザー入力を受け取り、関連するドキュメントを取得し、それらをフォーマットし、
+# 履歴とともにプロンプトに挿入し、LLMを呼び出し、出力を解析します。
 rag_chain = (
     RunnablePassthrough.assign(
-        # Retrieve documents based on "human_input" and format them
+        # 「human_input」に基づいてドキュメントを取得し、それらをフォーマットします
         context=lambda x: format_docs(retriever.invoke(x["human_input"]))
     )
     | prompt
@@ -141,12 +141,12 @@ rag_chain = (
     | StrOutputParser()
 )
 
-# --- History Management ---
-# Simple in-memory store for chat histories
+# --- 履歴管理 ---
+# チャット履歴用のシンプルなインメモリストア
 store = {}
 
 def get_history(session_id: str) -> BaseChatMessageHistory:
-    """Retrieves or creates chat history for a given session ID."""
+    """指定されたセッションIDのチャット履歴を取得または作成します。"""
     if session_id not in store:
         print(f"Creating new chat history for session: {session_id}")
         store[session_id] = ChatMessageHistory()
@@ -156,19 +156,19 @@ def get_history(session_id: str) -> BaseChatMessageHistory:
         print(f"Using existing chat history for session: {session_id}")
     return store[session_id]
 
-# --- Chain with History ---
-# Wrap the RAG chain with history management
+# --- 履歴付きチェーン ---
+# RAGチェーンを履歴管理でラップします
 chain_with_history = RunnableWithMessageHistory(
     rag_chain,
     get_history,
-    input_messages_key="human_input", # The key for the user's input in the input dictionary
-    history_messages_key="chat_history", # The key for the history placeholder in the prompt
+    input_messages_key="human_input", # 入力辞書内のユーザー入力のキー
+    history_messages_key="chat_history", # プロンプト内の履歴プレースホルダーのキー
 )
 print("\n--- RAG System Ready ---")
 # print(f"Using session ID: {SESSION_ID}")
 print("Enter your questions. Type 'quit' or 'exit' to stop.")
 
-# --- Interaction Loop ---
+# --- 対話ループ ---
 while True:
     try:
         human_input = input("\nYou: ")
@@ -179,11 +179,11 @@ while True:
             continue
 
         # Invoke the chain with history
-        # The config dictionary passes the session_id for history management
+        # config辞書は履歴管理のためにsession_idを渡します
         config = {"configurable": {"session_id": SESSION_ID}}
         # response = chain_with_history.invoke({"human_input": human_input}, config=config)
 
-        # ✅ 记录推理时间
+        # ✅ 推論時間を記録
         start_time = time.time()
         response = chain_with_history.invoke({"human_input": human_input}, config=config)
         duration = time.time() - start_time
@@ -193,11 +193,11 @@ while True:
 
     except Exception as e:
         print(f"\nAn error occurred: {e}")
-        # Consider adding more robust error handling or logging
+        # より堅牢なエラー処理またはロギングの追加を検討してください
     except KeyboardInterrupt:
         print("\nExiting due to user interrupt...")
         break
 
 print("\n--- Chat Session Ended ---")
-# Optional: See the final history state
+# オプション：最終履歴状態を確認
 # print("Final History Store:", store)
