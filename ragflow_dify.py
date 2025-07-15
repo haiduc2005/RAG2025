@@ -21,21 +21,21 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 import torch
 
-# --- Configuration ---
+# --- 設定 ---
 EXL_DIRECTORY = "data/excel"
 PERSIST_DIRECTORY = "./vector_db"
-OLLAMA_BASE_URL = "http://localhost:11434" # Adjust if Ollama runs elsewhere
+OLLAMA_BASE_URL = "http://localhost:11434" # Ollamaが別の場所で実行されている場合は調整してください
 LLM_MODEL = "deepseek-r1:1.5b"
-RETRIEVER_K = 3 # Number of relevant chunks to retrieve
+RETRIEVER_K = 3 # 取得する関連チャンクの数
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
-SESSION_ID = "my_rag_session" # Simple session ID for this example
+SESSION_ID = "my_rag_session" # この例のシンプルなセッションID
 
 app = FastAPI()
 
 def detect_encoding(file_bytes: bytes) -> str:
-    """自动检测文件编码"""
-    result = chardet.detect(file_bytes[:10000])  # 检测前10KB
+    """ファイルのエンコーディングを自動検出"""
+    result = chardet.detect(file_bytes[:10000])  # 最初の10KBを検出
     return result['encoding'] or 'utf-8'
 
 
@@ -44,21 +44,21 @@ async def upload_csv(files: List[UploadFile] = File(...)):
     results = []
 
     for file in files:
-        # 读取文件内容为字节
+        # ファイルの内容をバイトとして読み込む
         content = await file.read()
 
-        # 检测编码（处理日文）
+        # エンコーディングを検出（日本語を処理）
         encoding = detect_encoding(content)
 
         try:
-            # 转换为DataFrame（处理日文列名和数据）
+            # DataFrameに変換（日本語の列名とデータを処理）
             df = pd.read_csv(
                 io.StringIO(content.decode(encoding)),
                 encoding=encoding,
-                engine='python'  # 更兼容日文
+                engine='python'  # 日本語との互換性が向上
             )
 
-            # 替换列名中的不可见字符
+            # 列名内の不可視文字を置換
             df.columns = df.columns.str.strip()
 
             results.append({
